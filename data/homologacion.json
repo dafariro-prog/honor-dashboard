@@ -1,0 +1,27 @@
+{
+  "Meta||Honor_OMD_COSTA RICA":            {"hom":"Honor","pais":"Costa Rica","ag":"Honor"},
+  "Meta||Honor_OMD_EL SALVADOR":           {"hom":"Honor","pais":"El Salvador","ag":"Honor"},
+  "Meta||Honor_OMD_GUATEMALA":             {"hom":"Honor","pais":"Guatemala","ag":"Honor"},
+  "Meta||Honor_OMD_HONDURAS":              {"hom":"Honor","pais":"Honduras","ag":"Honor"},
+  "Meta||Honor_OMD_NICARAGUA":             {"hom":"Honor","pais":"Nicaragua","ag":"Honor"},
+  "Meta||Honor_OMD_PANAMA":                {"hom":"Honor","pais":"Panamá","ag":"Honor"},
+  "Meta||Honor_OMD_REPUBLICA DOMINICANA":  {"hom":"Honor","pais":"República Dominicana","ag":"Honor"},
+
+  "Google Ads||OMD_Honor Mobile_CostaRica":   {"hom":"Honor","pais":"Costa Rica","ag":"Honor"},
+  "Google Ads||OMD_Honor Mobile_ElSalvador":  {"hom":"Honor","pais":"El Salvador","ag":"Honor"},
+  "Google Ads||OMD_Honor Mobile_Guatemala":   {"hom":"Honor","pais":"Guatemala","ag":"Honor"},
+  "Google Ads||OMD_HONOR Mobile_Panama":      {"hom":"Honor","pais":"Panamá","ag":"Honor"},
+
+  "TikTok||[OMD] HONOR_CR": {"hom":"Honor","pais":"Costa Rica","ag":"Honor"},
+  "TikTok||[OMD] HONOR_GT": {"hom":"Honor","pais":"Guatemala","ag":"Honor"},
+  "TikTok||[OMD] HONOR_PA": {"hom":"Honor","pais":"Panamá","ag":"Honor"},
+  "TikTok||[OMD] HONOR_RD": {"hom":"Honor","pais":"República Dominicana","ag":"Honor"},
+
+  "DV360||[OMD] HONOR_CR": {"hom":"Honor","pais":"Costa Rica","ag":"Honor"},
+  "DV360||[OMD] HONOR_GT": {"hom":"Honor","pais":"Guatemala","ag":"Honor"},
+  "DV360||[OMD] HONOR_HN": {"hom":"Honor","pais":"Honduras","ag":"Honor"},
+  "DV360||[OMD] HONOR_NI": {"hom":"Honor","pais":"Nicaragua","ag":"Honor"},
+  "DV360||[OMD] HONOR_PA": {"hom":"Honor","pais":"Panamá","ag":"Honor"},
+  "DV360||[OMD] HONOR_RD": {"hom":"Honor","pais":"República Dominicana","ag":"Honor"},
+  "DV360||[OMD] HONOR_SV": {"hom":"Honor","pais":"El Salvador","ag":"Honor"}
+}
