@@ -66,9 +66,25 @@ async function run(query) {
   return rows;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// El token OAuth de Google a veces corta la conexión desde runners ("Premature close",
+// ECONNRESET, socket hang up). Reintentamos con backoff antes de dar el job por fallido.
+async function withRetry(fn, tries = 5) {
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try { return await fn(); }
+    catch (e) {
+      lastErr = e;
+      console.error(`Intento ${i}/${tries} falló: ${e.message}`);
+      if (i < tries) await sleep(2000 * i);
+    }
+  }
+  throw lastErr;
+}
+
 (async () => {
   console.log(`Consultando BigQuery · Honor · ${accounts.length} cuentas · desde ${SINCE}…`);
-  const [det, ser] = await Promise.all([run(Q_DETALLE), run(Q_SERIE)]);
+  const [det, ser] = await withRetry(() => Promise.all([run(Q_DETALLE), run(Q_SERIE)]));
 
   const detalle = [];
   for (const r of det) {
