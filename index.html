@@ -47,6 +47,8 @@
   .ms-empty{font-size:12px;color:var(--muted);padding:8px}
   .camp-search{border:1.5px solid var(--line);border-radius:9px;padding:7px 11px;font-size:12.5px;font-family:inherit;width:230px;max-width:48%;outline:none;font-weight:400}
   .camp-search:focus{border-color:var(--accent)}
+  .csv-btn{background:#151515;color:#fff;border:0;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .csv-btn:hover{background:#000}
   .fgroup label{font-size:10.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
   select,input{background:#fff;border:1.5px solid var(--line);color:var(--txt);padding:9px 11px;border-radius:9px;font-size:13px;outline:none;transition:.15s}
   select:focus,input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,0,0,.12)}
@@ -192,25 +194,11 @@
 
   <div class="filters">
     <div class="filters-grid">
-      <div class="fgroup" style="display:none"><label>Agencia</label><select id="fAgencia"></select></div>
-      <div class="fgroup"><label>País</label><select id="fPais"></select></div>
-      <div class="fgroup" style="display:none"><label>Cuenta</label><select id="fCuenta"></select></div>
-      <div class="fgroup" id="gAccount" style="display:none"><label>Account name</label>
-        <div class="ms" id="msAccount">
-          <button type="button" class="ms-btn" id="msAccountBtn">Todos</button>
-          <div class="ms-panel" id="msAccountPanel">
-            <input type="text" class="ms-search" id="msAccountSearch" placeholder="Buscar…">
-            <div class="ms-opts" id="msAccountOpts"></div>
-          </div>
-        </div>
-      </div>
-      <div class="fgroup" id="gPlanner" style="display:none"><label>Planner</label><select id="fPlanner"></select></div>
-      <div class="fgroup" id="gImplementador" style="display:none"><label>Implementador</label><select id="fImplementador"></select></div>
-      <div class="fgroup"><label>Estado</label><select id="fEstado">
-        <option value="">Todos</option><option value="act">Activas</option><option value="fin">Finalizadas</option>
-      </select></div>
-      <div class="fgroup"><label>Año</label><select id="fAnio"></select></div>
-      <div class="fgroup"><label>Mes</label><select id="fMes"></select></div>
+      <div class="fgroup"><label>País</label><div id="mPais"></div></div>
+      <div class="fgroup" id="gAccount"><label>Account name</label><div id="mAccount"></div></div>
+      <div class="fgroup"><label>Estado</label><div id="mEstado"></div></div>
+      <div class="fgroup"><label>Año</label><div id="mAnio"></div></div>
+      <div class="fgroup"><label>Mes</label><div id="mMes"></div></div>
     </div>
     <div class="filters-chips">
       <div class="fgroup"><label>Plataforma</label><div class="chips" id="fPlat"></div></div>
@@ -242,15 +230,16 @@
 
   <div class="card">
     <h3>📋 Detalle de campañas
-      <input id="campSearch" class="camp-search" placeholder="🔎 Filtrar campaña…">
+      <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <input id="campSearch" class="camp-search" placeholder="🔎 Filtrar campaña…">
+        <button id="csvBtn" class="csv-btn" title="Descargar el detalle filtrado en CSV">⬇ CSV</button>
+      </span>
     </h3>
     <div style="overflow-x:auto">
       <table id="tbl">
         <thead><tr>
           <th data-k="campana">Campaña</th>
           <th data-k="pais">País</th>
-          <th data-k="planner">Planner</th>
-          <th data-k="implementador">Implementador</th>
           <th data-k="tipo">Objetivo</th>
           <th data-k="activa">Estado</th>
           <th data-k="inicio">Inicio</th>
@@ -301,8 +290,40 @@ const PAIRS=[
   {vol:'conversions',volLabel:'Conversiones',kpiLabel:'CPA', color:'#EB3B38', kpi:d=>d.conversions?d.spend/d.conversions:0},
 ];
 
-let DATA={rows:[]}, platSel=new Set(), tipoSel=new Set(), accountSel=new Set(), accountOpts=[];
+let DATA={rows:[]}, platSel=new Set(), tipoSel=new Set();
+let paisSel=new Set(), accountSel=new Set(), estadoSel=new Set(), anioSel=new Set(), mesSel=new Set();
+let msAccount=null;  // controlador del multi-select de Account name (opciones dependen del país)
 let lineChart, platChart, spendPlatChart, sortK='spend', sortDir=-1;
+
+// Componente multi-select reutilizable (botón + panel con checkboxes y buscador opcional).
+// sel es un Set de strings; onChange se dispara al togglear.
+function makeMulti({mount, allLabel, search=false, labelOf=x=>x, sel, onChange}){
+  const ms=document.createElement('div'); ms.className='ms';
+  const btn=document.createElement('button'); btn.type='button'; btn.className='ms-btn'; btn.textContent=allLabel;
+  const panel=document.createElement('div'); panel.className='ms-panel';
+  let si=null;
+  if(search){ si=document.createElement('input'); si.type='text'; si.className='ms-search'; si.placeholder='Buscar…'; panel.appendChild(si); }
+  const box=document.createElement('div'); box.className='ms-opts'; panel.appendChild(box);
+  ms.appendChild(btn); ms.appendChild(panel); mount.appendChild(ms);
+  let opts=[];
+  const label=v=>{ try{ return labelOf(v); }catch(e){ return String(v); } };
+  function updateBtn(){ btn.textContent = sel.size===0 ? allLabel : (sel.size===1 ? label([...sel][0]) : sel.size+' seleccionados'); }
+  function renderOpts(){
+    const q=search?(si.value||'').toLowerCase():'';
+    const list=opts.filter(o=>!q||label(o).toLowerCase().includes(q));
+    box.innerHTML = list.length
+      ? list.map(o=>`<label class="ms-opt"><input type="checkbox" value="${esc(String(o))}" ${sel.has(o)?'checked':''}>${esc(label(o))}</label>`).join('')
+      : '<div class="ms-empty">Sin resultados</div>';
+    box.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{ cb.checked?sel.add(cb.value):sel.delete(cb.value); updateBtn(); onChange&&onChange(); });
+  }
+  btn.onclick=e=>{e.stopPropagation();panel.classList.toggle('open');};
+  if(search) si.oninput=renderOpts;
+  document.addEventListener('click',e=>{ if(!ms.contains(e.target)) panel.classList.remove('open'); });
+  return {
+    setOptions(newOpts){ opts=newOpts; for(const v of [...sel]) if(!opts.includes(v)) sel.delete(v); renderOpts(); updateBtn(); },
+    refresh(){ renderOpts(); updateBtn(); }
+  };
+}
 
 function fmt(n){return new Intl.NumberFormat('es').format(Math.round(n));}
 function fmt2(n){return new Intl.NumberFormat('es',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);}
@@ -371,15 +392,7 @@ function agencyLogoHTML(a){
 }
 
 function buildFilters(){
-  const ag=document.getElementById('fAgencia');
-  ag.innerHTML='<option value="">Todas las agencias</option>'+
-    [...new Set(DATA.detalle.map(r=>r.agencia))].sort().map(a=>`<option>${a}</option>`).join('');
-  ag.onchange=()=>{fillPaises();fillCuentas();fillAccounts();render();};
-
-  const pais=document.getElementById('fPais');
-  pais.onchange=()=>{fillCuentas();fillAccounts();render();};
-  fillPaises();
-
+  // Plataforma (chips multi)
   const plats=[...new Set(DATA.detalle.map(r=>r.plataforma))].sort();
   platSel=new Set(plats);
   const pc=document.getElementById('fPlat'); pc.innerHTML='';
@@ -389,6 +402,7 @@ function buildFilters(){
     pc.appendChild(c);
   });
 
+  // Objetivo (chips multi)
   const tipos=[...new Set(DATA.detalle.map(r=>tipoDe(r.objetivo)))]
     .sort((a,b)=>Object.keys(TIPO_META).indexOf(a)-Object.keys(TIPO_META).indexOf(b));
   tipoSel=new Set(tipos);
@@ -406,24 +420,33 @@ function buildFilters(){
     oc.appendChild(c);
   });
 
-  // Año y Mes: del detalle si trae 'mes' (filtra todo); si no, de la serie diaria
+  // País (multi con buscador)
+  const paises=[...new Set(DATA.detalle.map(r=>r.pais))].sort();
+  const msPais=makeMulti({mount:document.getElementById('mPais'), allLabel:'Todos los países', search:true, sel:paisSel,
+    onChange:()=>{ refreshAccounts(); render(); }});
+  msPais.setOptions(paises);
+
+  // Account name (multi con buscador; sus opciones se acotan al país seleccionado)
+  msAccount=makeMulti({mount:document.getElementById('mAccount'), allLabel:'Todos', search:true, sel:accountSel, onChange:render});
+  refreshAccounts();
+
+  // Estado (multi)
+  const EST_LBL={act:'Activas',fin:'Finalizadas'};
+  const msEstado=makeMulti({mount:document.getElementById('mEstado'), allLabel:'Todos', sel:estadoSel, labelOf:v=>EST_LBL[v]||v, onChange:render});
+  msEstado.setOptions(['act','fin']);
+
+  // Año y Mes (multi) — del detalle (trae 'mes'); si no, de la serie diaria
   const periodSrc = DATA.detalle.some(r=>r.mes)
     ? [...new Set(DATA.detalle.map(r=>r.mes).filter(Boolean))]
     : [...new Set(DATA.rows.map(r=>r.date.slice(0,7)))];
   const anios=[...new Set(periodSrc.map(m=>m.slice(0,4)))].sort();
-  document.getElementById('fAnio').innerHTML='<option value="">Todos</option>'+anios.map(y=>`<option>${y}</option>`).join('');
+  const msAnio=makeMulti({mount:document.getElementById('mAnio'), allLabel:'Todos', sel:anioSel, onChange:render});
+  msAnio.setOptions(anios);
   const meses=[...new Set(periodSrc.map(m=>m.slice(5,7)))].sort();
-  document.getElementById('fMes').innerHTML='<option value="">Todos</option>'+meses.map(m=>`<option value="${m}">${MES_NOMBRES[m]}</option>`).join('');
-  document.getElementById('fAnio').onchange=render;
-  document.getElementById('fMes').onchange=render;
+  const msMes=makeMulti({mount:document.getElementById('mMes'), allLabel:'Todos', sel:mesSel, labelOf:m=>MES_NOMBRES[m]||m, onChange:render});
+  msMes.setOptions(meses);
 
-  document.getElementById('fEstado').onchange=render;
-
-  // Planner / Implementador (solo si el dato ya trae esas columnas)
-  setupPlannerFilters();
-
-  fillCuentas(); fillAccounts();
-
+  // Toggle métrica de la evolución diaria
   const mt=document.getElementById('metricToggle');
   PAIRS.forEach((P,i)=>{
     const c=document.createElement('span'); c.className='chip'+(i===0?' on':''); c.textContent=`${P.volLabel} vs ${P.kpiLabel}`; c.dataset.p=i;
@@ -431,94 +454,42 @@ function buildFilters(){
     mt.appendChild(c);
   });
 
+  // Orden de la tabla
   document.querySelectorAll('#tbl th').forEach(th=>{
     th.onclick=()=>{const k=th.dataset.k;sortDir=(sortK===k)?-sortDir:-1;sortK=k;render();};
   });
 
-  // Multi-select "Account name"
-  const msPanel=document.getElementById('msAccountPanel');
-  document.getElementById('msAccountBtn').onclick=e=>{e.stopPropagation();msPanel.classList.toggle('open');};
-  document.getElementById('msAccountSearch').oninput=renderAccountOpts;
-  document.addEventListener('click',e=>{ if(!document.getElementById('msAccount').contains(e.target)) msPanel.classList.remove('open'); });
-
-  // Buscador de campaña en el detalle
+  // Buscador de campaña + descarga CSV
   document.getElementById('campSearch').oninput=renderTable;
+  document.getElementById('csvBtn').onclick=downloadCSV;
 }
 
-function setupPlannerFilters(){
-  const has = DATA.detalle.length && ('planner' in DATA.detalle[0]);
-  document.getElementById('gPlanner').style.display = has?'flex':'none';
-  document.getElementById('gImplementador').style.display = has?'flex':'none';
-  if(!has) return;
-  const fill=(field,selId)=>{
-    const vals=[...new Set(DATA.detalle.map(r=>r[field]).filter(Boolean))].sort();
-    const sel=document.getElementById(selId);
-    sel.innerHTML='<option value="">Todos</option>'+vals.map(v=>`<option>${v}</option>`).join('');
-    sel.onchange=render;
-  };
-  fill('planner','fPlanner');
-  fill('implementador','fImplementador');
+function refreshAccounts(){
+  if(!msAccount) return;
+  const list=[...new Set(DATA.detalle.filter(r=>(!paisSel.size||paisSel.has(r.pais))).map(r=>r.account_name).filter(Boolean))].sort();
+  msAccount.setOptions(list);
 }
-
-function fillPaises(){
-  const a=document.getElementById('fAgencia').value;
-  const paises=[...new Set(DATA.detalle.filter(r=>!a||r.agencia===a).map(r=>r.pais))].sort();
-  const sel=document.getElementById('fPais'); const cur=sel.value;
-  sel.innerHTML='<option value="">Todos los países</option>'+paises.map(p=>`<option ${p===cur?'selected':''}>${p}</option>`).join('');
-}
-function fillCuentas(){
-  const a=document.getElementById('fAgencia').value, p=document.getElementById('fPais').value;
-  const cuentas=[...new Set(DATA.detalle.filter(r=>(!a||r.agencia===a)&&(!p||r.pais===p)).map(r=>r.cuenta))].sort();
-  const sel=document.getElementById('fCuenta'); const cur=sel.value;
-  sel.innerHTML='<option value="">Todas las cuentas</option>'+cuentas.map(c=>`<option ${c===cur?'selected':''}>${c}</option>`).join('');
-  sel.onchange=()=>{fillAccounts();render();};
-}
-function fillAccounts(){
-  const g=document.getElementById('gAccount');
-  if(!DATA.detalle.some(r=>r.account_name)){ g.style.display='none'; return; }
-  g.style.display='flex';
-  const a=V('fAgencia'), p=V('fPais'), c=V('fCuenta');
-  accountOpts=[...new Set(DATA.detalle.filter(r=>(!a||r.agencia===a)&&(!p||r.pais===p)&&(!c||r.cuenta===c)).map(r=>r.account_name).filter(Boolean))].sort();
-  accountSel=new Set([...accountSel].filter(x=>accountOpts.includes(x)));  // conservar solo válidos
-  renderAccountOpts(); updateAccountBtn();
-}
-function renderAccountOpts(){
-  const q=(document.getElementById('msAccountSearch').value||'').toLowerCase();
-  const list=accountOpts.filter(x=>!q||x.toLowerCase().includes(q));
-  const box=document.getElementById('msAccountOpts');
-  box.innerHTML=list.length?list.map(x=>`<label class="ms-opt"><input type="checkbox" value="${esc(x)}" ${accountSel.has(x)?'checked':''}>${esc(x)}</label>`).join('')
-    :'<div class="ms-empty">Sin resultados</div>';
-  box.querySelectorAll('input').forEach(cb=>cb.onchange=()=>{
-    cb.checked?accountSel.add(cb.value):accountSel.delete(cb.value);
-    updateAccountBtn(); render();
-  });
-}
-function updateAccountBtn(){
-  document.getElementById('msAccountBtn').textContent =
-    accountSel.size===0 ? 'Todos' : accountSel.size+' seleccionado'+(accountSel.size>1?'s':'');
-}
-
-const V=id=>document.getElementById(id).value;
 
 function filtered(){
-  // Serie diaria (no trae objetivo ni estado): agencia, país, cuenta, planner, plataforma, año, mes
-  const a=V('fAgencia'), c=V('fCuenta'), p=V('fPais'), pl=V('fPlanner'), im=V('fImplementador'), yr=V('fAnio'), mo=V('fMes');
+  // Serie diaria (no trae objetivo ni estado): país, account, plataforma, año, mes
   return DATA.rows.filter(r=>
-    (!a||r.agencia===a)&&(!c||r.cuenta===c)&&(!p||r.pais===p)&&(!accountSel.size||accountSel.has(r.account_name))&&
-    (!pl||r.planner===pl)&&(!im||r.implementador===im)&&platSel.has(r.plataforma)&&
-    (!yr||r.date.slice(0,4)===yr)&&(!mo||r.date.slice(5,7)===mo))
+    (!paisSel.size||paisSel.has(r.pais)) &&
+    (!accountSel.size||accountSel.has(r.account_name)) &&
+    platSel.has(r.plataforma) &&
+    (!anioSel.size||anioSel.has(r.date.slice(0,4))) &&
+    (!mesSel.size||mesSel.has(r.date.slice(5,7))))
     .map(r=>({...r, spend:convSpend(r)}));
 }
 const sum=(arr,k)=>arr.reduce((s,r)=>s+r[k],0);
 
 function detalleFiltered(){
-  const a=V('fAgencia'), c=V('fCuenta'), p=V('fPais'), est=V('fEstado'), pl=V('fPlanner'), im=V('fImplementador'), yr=V('fAnio'), mo=V('fMes');
   return (DATA.detalle||[]).filter(r=>
-    (!a||r.agencia===a)&&(!c||r.cuenta===c)&&(!p||r.pais===p)&&(!accountSel.size||accountSel.has(r.account_name))&&
-    platSel.has(r.plataforma)&&tipoSel.has(tipoDe(r.objetivo))&&
-    (!est || (est==='act'?esActiva(r):!esActiva(r)))&&
-    (!pl||r.planner===pl)&&(!im||r.implementador===im)&&
-    (!yr || !r.mes || r.mes.slice(0,4)===yr)&&(!mo || !r.mes || r.mes.slice(5,7)===mo))
+    (!paisSel.size||paisSel.has(r.pais)) &&
+    (!accountSel.size||accountSel.has(r.account_name)) &&
+    platSel.has(r.plataforma) && tipoSel.has(tipoDe(r.objetivo)) &&
+    (!estadoSel.size||estadoSel.has(esActiva(r)?'act':'fin')) &&
+    (!anioSel.size || (r.mes&&anioSel.has(r.mes.slice(0,4)))) &&
+    (!mesSel.size || (r.mes&&mesSel.has(r.mes.slice(5,7))))    )
     .map(r=>({...r, spend:convSpend(r)}));
 }
 // última fecha con consumo por campaña (para estado a nivel campaña)
@@ -537,8 +508,8 @@ function render(){
 
 const PAIS_FLAG={'Costa Rica':'🇨🇷','El Salvador':'🇸🇻','Guatemala':'🇬🇹','Honduras':'🇭🇳','Nicaragua':'🇳🇮','Panamá':'🇵🇦','República Dominicana':'🇩🇴'};
 function renderAcctHead(det){
-  const pSel=document.getElementById('fPais').value;
-  const name=pSel||'HONOR · todos los países';
+  const pSel = paisSel.size===1 ? [...paisSel][0] : '';
+  const name = pSel || (paisSel.size>1 ? paisSel.size+' países' : 'HONOR · todos los países');
   const last=lastSpendPorCampana(det), total=Object.keys(last).length;
   const activas=Object.values(last).filter(ls=>ls>=DATA._thr).length;
   const pctAct=total?activas/total:0;
@@ -681,12 +652,13 @@ function renderObj(rows){
 const KPI_APLIC={Awareness:'cpm','Tráfico':'cpc',Views:'cpv','Conversión':'cpa','Interacción':'ctr',Otro:'cpm'};
 const trunc=(s,n)=>(s&&s.length>n)?s.slice(0,n-1)+'…':(s||'');
 
-function renderTable(){
-  // Agrega por campaña·plataforma·objetivo (suma meses si el filtro abarca varios)
+// Agrega el detalle filtrado por campaña·plataforma·objetivo, aplica buscador y orden.
+// Devuelve el array listo para la tabla y para exportar a CSV.
+function tableRows(){
   const groups={};
   detalleFiltered().forEach(o=>{
     const k=o.campana+'|'+o.plataforma+'|'+o.objetivo;
-    const g=groups[k]||(groups[k]={agencia:o.agencia,pais:o.pais,cuenta:o.cuenta,planner:o.planner,implementador:o.implementador,
+    const g=groups[k]||(groups[k]={pais:o.pais,cuenta:o.cuenta,account_name:o.account_name,
       campana:o.campana,plataforma:o.plataforma,objetivo:o.objetivo,inicio:o.inicio,fin:o.fin,last_spend:o.last_spend,
       spend:0,impressions:0,clicks:0,reach:0,views:0,engagements:0,conversions:0});
     ['spend','impressions','clicks','reach','views','engagements','conversions'].forEach(kk=>g[kk]+=o[kk]||0);
@@ -696,15 +668,16 @@ function renderTable(){
   });
   let arr=Object.values(groups).map(o=>{
     const tipo=tipoDe(o.objetivo), M=TIPO_META[tipo];
-    return {...o, tipo,
-      activa:esActiva(o),
-      resultado:o[M.vol[1]],
-      kpi:M.calc(o)};
+    return {...o, tipo, activa:esActiva(o), resultado:o[M.vol[1]], kpi:M.calc(o)};
   });
   const q=(document.getElementById('campSearch').value||'').trim().toLowerCase();
   if(q) arr=arr.filter(o=>(o.campana||'').toLowerCase().includes(q));
   arr.sort((x,y)=>{const A=x[sortK],B=y[sortK];return ((typeof A==='string')?A.localeCompare(B):(A<B?1:-1))*sortDir;});
+  return arr;
+}
 
+function renderTable(){
+  const arr=tableRows();
   document.querySelector('#tbl tbody').innerHTML=arr.map(o=>{
     const M=TIPO_META[o.tipo];
     const resTxt=`${M.vol[0]} <b>${M.volfmt(o.resultado)}</b>`;
@@ -712,8 +685,6 @@ function renderTable(){
     return `<tr>
       <td><span class="dot" style="background:${paisHex(o.pais)};margin-right:6px" title="${o.pais}"></span><span class="camp" title="${o.campana.replace(/"/g,'&quot;')}" style="display:inline-block;vertical-align:bottom">${trunc(o.campana,44)}</span></td>
       <td>${o.pais!=='—'?`<span class="pais-badge">${o.pais}</span>`:'—'}</td>
-      <td>${o.planner||'—'}</td>
-      <td>${o.implementador||'—'}</td>
       <td><span class="o-pill" style="background:${M.color}">${M.ico} ${o.tipo}</span></td>
       <td><span class="est ${o.activa?'activa':'fin'}">${o.activa?'● Activa':'○ Finalizada'}</span></td>
       <td>${fechaCorta(o.inicio)}</td>
@@ -724,6 +695,28 @@ function renderTable(){
       <td>${kpiTxt}</td>
     </tr>`;
   }).join('');
+}
+
+// Exporta el detalle actualmente filtrado a CSV (UTF-8 con BOM para que Excel muestre acentos).
+function downloadCSV(){
+  const arr=tableRows();
+  const head=['Pais','Plataforma','Account name','Campaña','Objetivo','Estado','Inicio','Fin',
+    'Inversion (USD)','Impresiones','Clics','Views','Conversiones','Resultado (metrica)','Resultado (valor)','KPI','KPI valor'];
+  const q=v=>{ const s=String(v==null?'':v); return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+  const lines=[head.join(',')];
+  arr.forEach(o=>{ const M=TIPO_META[o.tipo];
+    lines.push([o.pais,o.plataforma,o.account_name||'',o.campana,o.tipo,(o.activa?'Activa':'Finalizada'),o.inicio,o.fin,
+      (o.spend||0).toFixed(2),o.impressions||0,o.clicks||0,o.views||0,(o.conversions||0),
+      M.vol[0],(o.resultado||0),M.kpi,(o.kpi||0).toFixed(2)].map(q).join(','));
+  });
+  const csv='﻿'+lines.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const scope = paisSel.size ? [...paisSel].join('-').replace(/[^\w-]/g,'') : 'todos';
+  const fecha = (DATA.updated||'').slice(0,10);
+  const a=document.createElement('a');
+  a.href=url; a.download=`honor_campanas_${scope}_${fecha}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 </script>
 </body>
